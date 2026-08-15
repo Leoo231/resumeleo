@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hearth — Offline Media Hub</title>
+<style>
+  :root{
+    --bg:#12141a;
+    --bg-soft:#181b23;
+    --panel:#1b1e27;
+    --panel-alt:#21242f;
+    --line:#2a2d38;
+    --line-soft:#22252f;
+    --text:#e7e5e0;
+    --text-dim:#8b8d98;
+    --text-faint:#5c5e6b;
+    --accent:#d9a441;
+    --accent-soft:rgba(217,164,65,0.14);
+    --accent-glow:rgba(217,164,65,0.35);
+    --accent2:#4fb6a6;
+    --accent2-soft:rgba(79,182,166,0.14);
+    --danger:#c9573f;
+    --radius:10px;
+    --radius-lg:16px;
+    --mono:ui-monospace,"SF Mono","Cascadia Mono","JetBrains Mono",Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(217,164,65,0.06), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(79,182,166,0.05), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  button{font-family:inherit;}
+  ::selection{background:var(--accent-glow);}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:6px;}
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important;}
+  }
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    position:sticky; top:0; z-index:20;
+    display:flex; align-items:center; gap:14px;
+    padding:14px 18px;
+    background:rgba(18,20,26,0.85);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line-soft);
+  }
+  .icon-btn{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:40px; height:40px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    color:var(--text);
+    cursor:pointer;
+    transition:background .15s ease, border-color .15s ease, transform .1s ease;
+  }
+  .icon-btn:hover{background:var(--panel-alt); border-color:var(--accent-glow);}
+  .icon-btn:active{transform:scale(0.94);}
+  .icon-btn svg{width:20px; height:20px;}
+
+  .brand{display:flex; align-items:center; gap:10px; user-select:none;}
+  .brand-mark{
+    width:26px; height:26px; display:inline-flex; align-items:center; justify-content:center;
+    color:var(--accent); font-size:18px; transform:rotate(0deg);
+    filter:drop-shadow(0 0 6px var(--accent-glow));
+  }
+  .brand-text{
+    font-family:var(--mono); letter-spacing:0.22em; font-size:13px;
+    color:var(--text-dim); font-weight:600;
+  }
+
+  /* ---------- Sidebar ---------- */
+  .scrim{
+    position:fixed; inset:0; background:rgba(8,9,12,0.55);
+    opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:29;
+  }
+  .scrim.show{opacity:1; pointer-events:auto;}
+
+  .sidebar{
+    position:fixed; top:0; left:0; height:100%; width:280px;
+    background:var(--bg-soft);
+    border-right:1px solid var(--line);
+    transform:translateX(-100%);
+    transition:transform .25s cubic-bezier(.2,.9,.3,1);
+    z-index:30;
+    display:flex; flex-direction:column;
+  }
+  .sidebar.open{transform:translateX(0);}
+  .sidebar-head{
+    padding:20px 20px 10px; font-family:var(--mono); font-size:11px;
+    letter-spacing:.18em; color:var(--text-faint); text-transform:uppercase;
+  }
+  .sidebar-inner{display:flex; flex-direction:column; gap:4px; padding:6px 12px;}
+  .nav-item{
+    display:flex; align-items:center; gap:12px;
+    background:transparent; border:1px solid transparent; color:var(--text-dim);
+    padding:12px 12px; border-radius:10px; text-align:left; cursor:pointer;
+    font-size:14.5px; transition:background .15s ease, color .15s ease;
+  }
+  .nav-item svg{width:19px; height:19px; flex:none; opacity:.85;}
+  .nav-item:hover{background:var(--panel); color:var(--text);}
+  .nav-item.active{background:var(--accent-soft); color:var(--accent); border-color:rgba(217,164,65,0.25);}
+  .nav-item .nav-sub{margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--text-faint);}
+
+  .sidebar-foot{
+    margin-top:auto; padding:16px 20px; font-size:11.5px; color:var(--text-faint);
+    border-top:1px solid var(--line-soft); font-family:var(--mono); line-height:1.6;
+  }
+
+  /* ---------- Layout ---------- */
+  .app{max-width:920px; margin:0 auto; padding:28px 20px 120px;}
+  .tab{display:none;}
+  .tab.active{display:block; animation:fadeIn .25s ease;}
+  @keyframes fadeIn{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;}}
+
+  .panel-title{
+    font-family:var(--mono); font-size:12px; letter-spacing:.2em; text-transform:uppercase;
+    color:var(--text-faint); margin:0 0 16px;
+  }
+
+  /* ---------- Source row ---------- */
+  .source-row{
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-lg);
+    padding:14px 16px; margin-bottom:22px;
+  }
+  .btn{
+    display:inline-flex; align-items:center; gap:8px;
+    background:var(--panel-alt); color:var(--text);
+    border:1px solid var(--line); border-radius:9px;
+    padding:9px 14px; font-size:13.5px; cursor:pointer;
+    transition:border-color .15s ease, background .15s ease, transform .1s ease;
+  }
+  .btn svg{width:16px; height:16px;}
+  .btn:hover{border-color:var(--accent-glow);}
+  .btn:active{transform:scale(0.97);}
+  .btn.accent{background:var(--accent-soft); color:var(--accent); border-color:rgba(217,164,65,.3);}
+  .btn.accent2{background:var(--accent2-soft); color:var(--accent2); border-color:rgba(79,182,166,.3);}
+  .btn.small{padding:6px 10px; font-size:12px;}
+
+  .source-meta{font-family:var(--mono); font-size:12px; color:var(--text-dim);}
+  .source-meta b{color:var(--text);}
+  .source-hint{font-size:11.5px; color:var(--text-faint); width:100%;}
+
+  /* ---------- Transport cluster ---------- */
+  .transport{
+    display:flex; flex-direction:column; align-items:center; gap:18px;
+    background:radial-gradient(180px 140px at 50% 0%, rgba(217,164,65,.05), transparent 70%), var(--panel);
+    border:1px solid var(--line); border-radius:var(--radius-lg);
+    padding:30px 20px 26px; margin-bottom:22px;
+  }
+  .now-playing{
+    width:100%; max-width:420px; text-align:center; overflow:hidden;
+  }
+  .np-title{
+    font-size:16px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .np-sub{font-family:var(--mono); font-size:11.5px; color:var(--text-faint); margin-top:4px; letter-spacing:.05em;}
+
+  .transport-cluster{display:flex; align-items:center; gap:22px;}
+  .xport-btn{
+    display:flex; align-items:center; justify-content:center;
+    background:var(--panel-alt); border:1px solid var(--line); border-radius:50%;
+    color:var(--text); cursor:pointer; transition:border-color .15s ease, transform .1s ease, box-shadow .2s ease;
+  }
+  .xport-btn:hover{border-color:var(--accent-glow);}
+  .xport-btn:active{transform:scale(0.93);}
+  .xport-skip{width:52px; height:52px;}
+  .xport-skip svg{width:22px; height:22px;}
+  .xport-play{
+    width:72px; height:72px;
+    background:var(--accent-soft); border-color:rgba(217,164,65,.4); color:var(--accent);
+  }
+  .xport-play svg{width:28px; height:28px;}
+  .xport-play.playing{box-shadow:0 0 0 6px var(--accent-soft), 0 0 22px var(--accent-glow); animation:pulse 2.4s ease-in-out infinite;}
+  @keyframes pulse{
+    0%,100%{box-shadow:0 0 0 6px var(--accent-soft), 0 0 14px var(--accent-glow);}
+    50%{box-shadow:0 0 0 9px var(--accent-soft), 0 0 26px var(--accent-glow);}
+  }
+
+  .seek-row{width:100%; max-width:460px; display:flex; align-items:center; gap:10px;}
+  .time{font-family:var(--mono); font-size:11px; color:var(--text-faint); width:38px; flex:none;}
+  .time.right{text-align:right;}
+
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; width:100%; height:4px;
+    background:var(--line); border-radius:3px; outline-offset:4px;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:13px; height:13px; border-radius:50%;
+    background:var(--accent); cursor:pointer; border:2px solid var(--bg);
+    box-shadow:0 0 0 1px var(--accent-glow);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:13px; height:13px; border-radius:50%; background:var(--accent); border:2px solid var(--bg); cursor:pointer;
+  }
+  .vol-row{display:flex; align-items:center; gap:10px; width:100%; max-width:160px; color:var(--text-faint);}
+  .vol-row svg{width:16px; height:16px; flex:none;}
+
+  /* ---------- Track / chapter list ---------- */
+  .list-card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-lg); overflow:hidden;}
+  .list-head{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:12px 16px; border-bottom:1px solid var(--line-soft);
+    font-family:var(--mono); font-size:11px; letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase;
+  }
+  .track-list{max-height:420px; overflow-y:auto;}
+  .track-row{
+    display:flex; align-items:center; gap:12px;
+    padding:11px 16px; cursor:pointer; border-bottom:1px solid var(--line-soft);
+    transition:background .12s ease;
+  }
+  .track-row:last-child{border-bottom:none;}
+  .track-row:hover{background:var(--panel-alt);}
+  .track-row.active{background:var(--accent-soft); color:var(--accent);}
+  .track-idx{font-family:var(--mono); font-size:11px; color:var(--text-faint); width:22px; flex:none; text-align:right;}
+  .track-row.active .track-idx{color:var(--accent);}
+  .track-name{flex:1; font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .track-eq{width:14px; height:14px; flex:none; opacity:0;}
+  .track-row.active .track-eq{opacity:1;}
+  .track-eq span{display:inline-block; width:2.5px; height:100%; background:var(--accent); margin-right:2px; animation:eq 0.9s ease-in-out infinite;}
+  .track-eq span:nth-child(2){animation-delay:.2s;} .track-eq span:nth-child(3){animation-delay:.4s;}
+  @keyframes eq{0%,100%{transform:scaleY(.3);} 50%{transform:scaleY(1);}}
+
+  .empty{
+    padding:40px 20px; text-align:center; color:var(--text-faint); font-size:13px; line-height:1.7;
+  }
+  .empty svg{width:34px; height:34px; opacity:.35; margin-bottom:10px;}
+
+  /* ---------- Files tab ---------- */
+  .files-grid{display:grid; grid-template-columns:230px 1fr; gap:16px;}
+  @media (max-width:640px){ .files-grid{grid-template-columns:1fr;} }
+  .tree-pane, .list-pane{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-lg); overflow:hidden;}
+  .tree-pane{max-height:520px; overflow-y:auto; padding:8px 6px;}
+  .tree-node{font-size:13px;}
+  .tree-row{
+    display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:7px; cursor:pointer; color:var(--text-dim);
+  }
+  .tree-row:hover{background:var(--panel-alt); color:var(--text);}
+  .tree-row.active{background:var(--accent-soft); color:var(--accent);}
+  .tree-row svg{width:15px; height:15px; flex:none;}
+  .tree-chev{width:11px !important; height:11px !important; transition:transform .15s ease; opacity:.6;}
+  .tree-row.expanded .tree-chev{transform:rotate(90deg);}
+  .tree-children{margin-left:16px; display:none; border-left:1px solid var(--line-soft); padding-left:4px;}
+  .tree-children.open{display:block;}
+
+  .breadcrumb{
+    padding:11px 16px; border-bottom:1px solid var(--line-soft);
+    font-family:var(--mono); font-size:11.5px; color:var(--text-dim); overflow-x:auto; white-space:nowrap;
+  }
+  .breadcrumb span{cursor:pointer;}
+  .breadcrumb span:hover{color:var(--accent);}
+  .breadcrumb .sep{color:var(--text-faint); margin:0 5px;}
+
+  .file-row{
+    display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid var(--line-soft);
+  }
+  .file-row:last-child{border-bottom:none;}
+  .file-row svg{width:17px; height:17px; flex:none; color:var(--text-faint);}
+  .file-row .fname{flex:1; font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .file-row .fsize{font-family:var(--mono); font-size:11px; color:var(--text-faint); flex:none;}
+  .file-row.dir{cursor:pointer;}
+  .file-row.dir:hover{background:var(--panel-alt);}
+  .file-row .play-mini{
+    flex:none; width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    background:var(--panel-alt); border:1px solid var(--line); color:var(--accent); cursor:pointer;
+  }
+  .file-row .play-mini svg{width:12px; height:12px;}
+  .file-row .play-mini:hover{border-color:var(--accent-glow);}
+  .list-pane .track-list{max-height:none;}
+
+  /* ---------- Audiobooks ---------- */
+  .shelf{display:flex; flex-direction:column; gap:10px;}
+  .book-card{
+    display:flex; align-items:center; gap:14px;
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-lg);
+    padding:14px 16px; cursor:pointer; transition:border-color .15s ease, background .15s ease;
+  }
+  .book-card:hover{border-color:rgba(79,182,166,.35); background:var(--panel-alt);}
+  .book-card.playing{border-color:rgba(79,182,166,.5); background:var(--accent2-soft);}
+  .book-spine{
+    flex:none; width:40px; height:54px; border-radius:5px;
+    background:linear-gradient(160deg, var(--accent2), #2e7568);
+    display:flex; align-items:center; justify-content:center; color:#0e1512;
+  }
+  .book-spine svg{width:18px; height:18px;}
+  .book-info{flex:1; min-width:0;}
+  .book-title{font-size:14.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .book-meta{font-family:var(--mono); font-size:11px; color:var(--text-faint); margin-top:3px;}
+  .book-action{flex:none; font-family:var(--mono); font-size:11px; color:var(--accent2); letter-spacing:.06em;}
+
+  /* ---------- Mini player ---------- */
+  .mini-player{
+    position:fixed; left:0; right:0; bottom:0; z-index:15;
+    background:rgba(18,20,26,0.92); backdrop-filter:blur(10px);
+    border-top:1px solid var(--line);
+    display:flex; align-items:center; gap:14px;
+    padding:10px 18px; transform:translateY(110%); transition:transform .25s ease;
+  }
+  .mini-player.show{transform:translateY(0);}
+  .mini-info{flex:1; min-width:0;}
+  .mini-title{font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .mini-progress{height:3px; background:var(--line); border-radius:2px; margin-top:6px; cursor:pointer; position:relative;}
+  .mini-progress-fill{height:100%; background:var(--accent); border-radius:2px; width:0%;}
+  .mini-controls{display:flex; align-items:center; gap:8px; flex:none;}
+  .mini-btn{
+    width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    background:var(--panel-alt); border:1px solid var(--line); color:var(--text); cursor:pointer;
+  }
+  .mini-btn svg{width:14px; height:14px;}
+  .mini-btn.play{background:var(--accent-soft); color:var(--accent); border-color:rgba(217,164,65,.4);}
+
+  @media (max-width:520px){
+    .transport-cluster{gap:16px;}
+    .xport-skip{width:46px; height:46px;}
+    .xport-play{width:64px; height:64px;}
+  }
+</style>
+</head>
+<body>
+
+  <header class="topbar">
+    <button id="burgerBtn" class="icon-btn burger" aria-label="Open menu" aria-expanded="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+    </button>
+    <div class="brand"><span class="brand-mark">◈</span><span class="brand-text" id="brandLabel">HEARTH</span></div>
+  </header>
+
+  <div id="scrim" class="scrim"></div>
+  <nav id="sidebar" class="sidebar" aria-hidden="true">
+    <div class="sidebar-head">Menu</div>
+    <div class="sidebar-inner">
+      <button class="nav-item active" data-tab="music">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        Music Player
+      </button>
+      <button class="nav-item" data-tab="files">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+        Files
+      </button>
+      <button class="nav-item" data-tab="audiobooks">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        Audiobooks
+      </button>
+    </div>
+    <div class="sidebar-foot">Runs entirely offline.<br>Nothing here leaves this device.</div>
+  </nav>
+
+  <main class="app">
+
+    <!-- MUSIC TAB -->
+    <section id="tab-music" class="tab active">
+      <p class="panel-title">Music Player</p>
+
+      <div class="source-row">
+        <button class="btn accent" id="pickMusicBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+          Choose Music Folder
+        </button>
+        <button class="btn small" id="reconnectMusicBtn" style="display:none;">Reconnect folder</button>
+        <span class="source-meta" id="musicMeta">No folder selected yet.</span>
+        <span class="source-hint" id="musicHint"></span>
+      </div>
+
+      <div class="transport">
+        <div class="now-playing">
+          <div class="np-title" id="npTitle">Nothing playing</div>
+          <div class="np-sub" id="npSub">Select a music folder to begin</div>
+        </div>
+
+        <div class="transport-cluster">
+          <button class="xport-btn xport-skip" id="prevBtn" aria-label="Previous track">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zM20 18L10 12l10-6z"/></svg>
+          </button>
+          <button class="xport-btn xport-play" id="playBtn" aria-label="Play">
+            <svg id="playIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+          <button class="xport-btn xport-skip" id="nextBtn" aria-label="Next track">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM4 18l10-6L4 6z"/></svg>
+          </button>
+        </div>
+
+        <div class="seek-row">
+          <span class="time" id="curTime">0:00</span>
+          <input type="range" id="seekBar" min="0" max="100" value="0" step="0.1">
+          <span class="time right" id="durTime">0:00</span>
+        </div>
+
+        <div class="vol-row">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>
+          <input type="range" id="volBar" min="0" max="100" value="80">
+        </div>
+      </div>
+
+      <div class="list-card">
+        <div class="list-head"><span>Tracklist</span><span id="trackCount">0 tracks</span></div>
+        <div class="track-list" id="trackList">
+          <div class="empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+            <div>Choose a music folder to see your tracks here.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FILES TAB -->
+    <section id="tab-files" class="tab">
+      <p class="panel-title">Files</p>
+      <div class="source-row">
+        <button class="btn accent" id="pickFilesBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+          Choose Folder to Browse
+        </button>
+        <button class="btn small" id="reconnectFilesBtn" style="display:none;">Reconnect folder</button>
+        <span class="source-meta" id="filesMeta">No folder selected yet.</span>
+      </div>
+
+      <div class="files-grid">
+        <div class="tree-pane" id="treePane">
+          <div class="empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+            <div>Folder tree appears here</div>
+          </div>
+        </div>
+        <div class="list-pane">
+          <div class="breadcrumb" id="breadcrumb">—</div>
+          <div id="fileListContainer">
+            <div class="empty">Nothing to show yet.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- AUDIOBOOKS TAB -->
+    <section id="tab-audiobooks" class="tab">
+      <p class="panel-title">Audiobooks</p>
+      <div class="source-row">
+        <button class="btn accent2" id="pickAudiobooksBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          Choose Audiobooks Folder
+        </button>
+        <button class="btn small" id="reconnectAudiobooksBtn" style="display:none;">Reconnect folder</button>
+        <span class="source-meta" id="audiobooksMeta">No folder selected yet.</span>
+      </div>
+
+      <div class="shelf" id="bookShelf">
+        <div class="empty">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          <div>Choose a folder — each subfolder becomes a book, in listening order.</div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <div id="miniPlayer" class="mini-player">
+    <div class="mini-info">
+      <div class="mini-title" id="miniTitle">Nothing playing</div>
+      <div class="mini-progress" id="miniProgress"><div class="mini-progress-fill" id="miniProgressFill"></div></div>
+    </div>
+    <div class="mini-controls">
+      <button class="mini-btn" id="miniPrev" aria-label="Previous">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zM20 18L10 12l10-6z"/></svg>
+      </button>
+      <button class="mini-btn play" id="miniPlay" aria-label="Play">
+        <svg id="miniPlayIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+      </button>
+      <button class="mini-btn" id="miniNext" aria-label="Next">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM4 18l10-6L4 6z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <audio id="audioEl" preload="metadata"></audio>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ================= helpers ================= */
+  const AUDIO_EXT = new Set(['mp3','wav','ogg','oga','m4a','aac','flac','opus','wma','webm']);
+  const $ = (id) => document.getElementById(id);
+  const isAudioExt = (ext) => AUDIO_EXT.has((ext||'').toLowerCase());
+  const extOf = (name) => { const m = /\.([a-z0-9]+)$/i.exec(name); return m ? m[1].toLowerCase() : ''; };
+  const stripExt = (name) => name.replace(/\.[a-z0-9]+$/i, '');
+  const naturalCompare = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+  const formatTime = (sec) => {
+    if (!isFinite(sec) || sec < 0) return '0:00';
+    const m = Math.floor(sec / 60), s = Math.floor(sec % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+  const formatSize = (bytes) => {
+    if (bytes == null) return '—';
+    const units = ['B','KB','MB','GB']; let n = bytes, i = 0;
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+    return `${n.toFixed(i > 0 && n < 10 ? 1 : 0)} ${units[i]}`;
+  };
+  const HAS_FS_ACCESS = 'showDirectoryPicker' in window;
+
+  /* ================= IndexedDB (persist folder handles) ================= */
+  const DB_NAME = 'hearth-db', STORE = 'handles';
+  function idbOpen() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function idbSet(key, value) {
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+  async function idbGet(key) {
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readonly');
+      const req = tx.objectStore(STORE).get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function verifyPermission(handle, mode = 'read') {
+    const opts = { mode };
+    if ((await handle.queryPermission(opts)) === 'granted') return true;
+    if ((await handle.requestPermission(opts)) === 'granted') return true;
+    return false;
+  }
+
+  /* ================= tree building ================= */
+  async function buildTreeFromHandle(dirHandle, path) {
+    const node = { name: dirHandle.name, kind: 'directory', path, children: [] };
+    const entries = [];
+    for await (const [name, handle] of dirHandle.entries()) entries.push([name, handle]);
+    entries.sort((a, b) => naturalCompare(a[0], b[0]));
+    for (const [name, handle] of entries) {
+      const childPath = path ? path + '/' + name : name;
+      if (handle.kind === 'directory') node.children.push(await buildTreeFromHandle(handle, childPath));
+      else node.children.push({ name, kind: 'file', path: childPath, handle, ext: extOf(name) });
+    }
+    sortChildren(node);
+    return node;
+  }
+
+  function buildTreeFromFileList(fileList) {
+    const files = Array.from(fileList).filter(f => f.webkitRelativePath);
+    if (!files.length) return null;
+    const rootName = files[0].webkitRelativePath.split('/')[0];
+    const root = { name: rootName, kind: 'directory', path: rootName, children: [] };
+    for (const file of files) {
+      const parts = file.webkitRelativePath.split('/');
+      let cur = root;
+      for (let i = 1; i < parts.length; i++) {
+        const part = parts[i], isFile = i === parts.length - 1, path = parts.slice(0, i + 1).join('/');
+        if (isFile) {
+          cur.children.push({ name: part, kind: 'file', path, file, ext: extOf(part) });
+        } else {
+          let next = cur.children.find(c => c.kind === 'directory' && c.name === part);
+          if (!next) { next = { name: part, kind: 'directory', path, children: [] }; cur.children.push(next); }
+          cur = next;
+        }
+      }
+    }
+    sortChildren(root);
+    return root;
+  }
+
+  function sortChildren(node) {
+    if (!node.children) return;
+    node.children.sort((a, b) => {
+      if (a.kind !== b.kind) return a.kind === 'directory' ? -1 : 1;
+      return naturalCompare(a.name, b.name);
+    });
+    node.children.forEach(sortChildren);
+  }
+
+  function flattenAudioFiles(node, out = []) {
+    if (!node) return out;
+    if (node.kind === 'file') { if (isAudioExt(node.ext)) out.push(node); return out; }
+    for (const c of node.children) flattenAudioFiles(c, out);
+    return out;
+  }
+
+  async function getFileFromNode(node) {
+    if (node.file) return node.file;
+    if (node.handle) return await node.handle.getFile();
+    throw new Error('No file source on node');
+  }
+
+  /* ================= folder picking ================= */
+  async function pickFolder(slot) {
+    if (HAS_FS_ACCESS) {
+      let handle;
+      try { handle = await window.showDirectoryPicker(); }
+      catch (e) { if (e.name === 'AbortError') return null; throw e; }
+      await idbSet(slot, handle);
+      const tree = await buildTreeFromHandle(handle, handle.name);
+      return tree;
+    }
+    return new Promise((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file'; input.webkitdirectory = true; input.multiple = true;
+      input.style.display = 'none';
+      input.addEventListener('change', () => {
+        resolve(buildTreeFromFileList(input.files));
+        input.remove();
+      }, { once: true });
+      document.body.appendChild(input);
+      input.click();
+    });
+  }
+
+  async function restoreSlot(slot, onReady, reconnectBtn) {
+    if (!HAS_FS_ACCESS) return;
+    let handle;
+    try { handle = await idbGet(slot); } catch (e) { return; }
+    if (!handle) return;
+    try {
+      const granted = await handle.queryPermission({ mode: 'read' });
+      if (granted === 'granted') {
+        const tree = await buildTreeFromHandle(handle, handle.name);
+        onReady(tree);
+      } else {
+        reconnectBtn.style.display = 'inline-flex';
+        reconnectBtn.onclick = async () => {
+          const ok = await verifyPermission(handle, 'read');
+          if (ok) { const tree = await buildTreeFromHandle(handle, handle.name); onReady(tree); reconnectBtn.style.display = 'none'; }
+        };
+      }
+    } catch (e) { /* handle stale / revoked — ignore */ }
+  }
+
+  /* ================= sidebar / tabs ================= */
+  const sidebar = $('sidebar'), scrim = $('scrim'), burgerBtn = $('burgerBtn');
+  function openSidebar() { sidebar.classList.add('open'); scrim.classList.add('show'); burgerBtn.setAttribute('aria-expanded','true'); }
+  function closeSidebar() { sidebar.classList.remove('open'); scrim.classList.remove('show'); burgerBtn.setAttribute('aria-expanded','false'); }
+  burgerBtn.addEventListener('click', () => sidebar.classList.contains('open') ? closeSidebar() : openSidebar());
+  scrim.addEventListener('click', closeSidebar);
+
+  let currentTab = 'music';
+  function switchTab(name) {
+    currentTab = name;
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + name));
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+    closeSidebar();
+    updateMiniPlayerVisibility();
+  }
+  document.querySelectorAll('.nav-item').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+
+  /* ================= player core ================= */
+  const audioEl = $('audioEl');
+  let playlist = [];          // array of file nodes currently loaded
+  let currentIndex = -1;
+  let context = 'music';      // 'music' | 'files' | 'audiobook'
+  let currentBookKey = null;
+  let currentObjectUrl = null;
+  let consecutiveErrors = 0;
+
+  function nodeTitle(node) { return stripExt(node.name); }
+
+  async function playIndex(i, opts = {}) {
+    if (i < 0 || i >= playlist.length) return;
+    currentIndex = i;
+    context = opts.context || context;
+    currentBookKey = opts.bookKey ?? currentBookKey;
+    const node = playlist[i];
+
+    let file;
+    try { file = await getFileFromNode(node); }
+    catch (e) { handlePlaybackError(); return; }
+
+    if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+    currentObjectUrl = URL.createObjectURL(file);
+    audioEl.src = currentObjectUrl;
+
+    audioEl.addEventListener('loadedmetadata', function onMeta() {
+      audioEl.removeEventListener('loadedmetadata', onMeta);
+      if (context === 'audiobook' && currentBookKey) {
+        const saved = getBookProgress(currentBookKey);
+        if (saved && saved.trackIndex === i && saved.time > 0 && saved.time < audioEl.duration - 2) {
+          audioEl.currentTime = saved.time;
+        }
+      }
+    }, { once: true });
+
+    try { await audioEl.play(); consecutiveErrors = 0; }
+    catch (e) { /* autoplay restrictions etc. */ }
+
+    updateNowPlayingUI(node);
+    renderActiveHighlight();
+  }
+
+  function handlePlaybackError() {
+    consecutiveErrors++;
+    if (consecutiveErrors < playlist.length && consecutiveErrors < 25) next();
+  }
+
+  function next() {
+    if (!playlist.length) return;
+    if (context === 'audiobook') {
+      if (currentIndex + 1 < playlist.length) playIndex(currentIndex + 1);
+    } else {
+      playIndex((currentIndex + 1) % playlist.length);
+    }
+  }
+  function prev() {
+    if (!playlist.length) return;
+    if (audioEl.currentTime > 3) { audioEl.currentTime = 0; return; }
+    if (context === 'audiobook') {
+      if (currentIndex > 0) playIndex(currentIndex - 1);
+    } else {
+      playIndex((currentIndex - 1 + playlist.length) % playlist.length);
+    }
+  }
+  function togglePlay() {
+    if (!playlist.length) return;
+    if (currentIndex === -1) { playIndex(0); return; }
+    if (audioEl.paused) audioEl.play().catch(()=>{}); else audioEl.pause();
+  }
+
+  audioEl.addEventListener('ended', () => {
+    if (context === 'audiobook') clearBookProgressIfLast(); 
+    next();
+  });
+  audioEl.addEventListener('error', handlePlaybackError);
+  audioEl.addEventListener('play', () => setPlayingUI(true));
+  audioEl.addEventListener('pause', () => setPlayingUI(false));
+
+  let lastSave = 0;
+  audioEl.addEventListener('timeupdate', () => {
+    const dur = audioEl.duration || 0;
+    const pct = dur ? (audioEl.currentTime / dur) * 100 : 0;
+    $('seekBar').value = pct;
+    $('curTime').textContent = formatTime(audioEl.currentTime);
+    $('durTime').textContent = formatTime(dur);
+    $('miniProgressFill').style.width = pct + '%';
+
+    if (context === 'audiobook' && currentBookKey) {
+      const now = Date.now();
+      if (now - lastSave > 4000) { lastSave = now; saveBookProgress(currentBookKey, currentIndex, audioEl.currentTime); }
+    }
+  });
+
+  $('seekBar').addEventListener('input', (e) => {
+    const dur = audioEl.duration || 0;
+    audioEl.currentTime = (e.target.value / 100) * dur;
+  });
+  $('volBar').addEventListener('input', (e) => { audioEl.volume = e.target.value / 100; });
+  audioEl.volume = 0.8;
+
+  function setPlayingUI(playing) {
+    const icon = playing
+      ? '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>'
+      : '<path d="M8 5v14l11-7z"/>';
+    $('playIcon').innerHTML = icon;
+    $('miniPlayIcon').innerHTML = icon;
+    $('playBtn').classList.toggle('playing', playing);
+    $('playBtn').setAttribute('aria-label', playing ? 'Pause' : 'Play');
+  }
+
+  function updateNowPlayingUI(node) {
+    const title = nodeTitle(node);
+    $('npTitle').textContent = title;
+    $('npSub').textContent = context === 'audiobook' ? 'Audiobook chapter' : (context === 'files' ? 'Playing from Files' : `Track ${currentIndex + 1} of ${playlist.length}`);
+    $('miniTitle').textContent = title;
+    updateMiniPlayerVisibility();
+  }
+
+  function renderActiveHighlight() {
+    document.querySelectorAll('.track-row[data-idx]').forEach(row => {
+      row.classList.toggle('active', Number(row.dataset.idx) === currentIndex && row.dataset.ctx === context);
+    });
+    document.querySelectorAll('.book-card[data-key]').forEach(card => {
+      card.classList.toggle('playing', card.dataset.key === currentBookKey && context === 'audiobook');
+    });
+  }
+
+  $('playBtn').addEventListener('click', togglePlay);
+  $('prevBtn').addEventListener('click', prev);
+  $('nextBtn').addEventListener('click', next);
+  $('miniPlay').addEventListener('click', togglePlay);
+  $('miniPrev').addEventListener('click', prev);
+  $('miniNext').addEventListener('click', next);
+  $('miniProgress').addEventListener('click', (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pct = (e.clientX - rect.left) / rect.width;
+    if (audioEl.duration) audioEl.currentTime = pct * audioEl.duration;
+  });
+
+  function updateMiniPlayerVisibility() {
+    const show = currentTab !== 'music' && playlist.length > 0 && currentIndex !== -1;
+    $('miniPlayer').classList.toggle('show', show);
+  }
+
+  /* ---- audiobook progress storage ---- */
+  function getBookProgress(key) {
+    try { return JSON.parse(localStorage.getItem('hearth:ab:' + key) || 'null'); } catch (e) { return null; }
+  }
+  function saveBookProgress(key, trackIndex, time) {
+    try { localStorage.setItem('hearth:ab:' + key, JSON.stringify({ trackIndex, time })); } catch (e) {}
+  }
+  function clearBookProgressIfLast() {
+    if (currentIndex >= playlist.length - 1 && currentBookKey) {
+      try { localStorage.removeItem('hearth:ab:' + currentBookKey); } catch (e) {}
+    }
+  }
+
+  /* ================= MUSIC TAB ================= */
+  let musicTree = null;
+
+  function renderTrackList(nodes, ctx) {
+    const container = $('trackList');
+    $('trackCount').textContent = `${nodes.length} track${nodes.length === 1 ? '' : 's'}`;
+    if (!nodes.length) {
+      container.innerHTML = `<div class="empty">No audio files found in this folder.</div>`;
+      return;
+    }
+    container.innerHTML = '';
+    nodes.forEach((node, i) => {
+      const row = document.createElement('div');
+      row.className = 'track-row';
+      row.dataset.idx = i; row.dataset.ctx = ctx;
+      row.innerHTML = `
+        <span class="track-idx">${i + 1}</span>
+        <span class="track-name">${escapeHtml(nodeTitle(node))}</span>
+        <span class="track-eq"><span></span><span></span><span></span></span>`;
+      row.addEventListener('click', () => { playlist = nodes; playIndex(i, { context: ctx, bookKey: null }); });
+      container.appendChild(row);
+    });
+    renderActiveHighlight();
+  }
+
+  function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  async function loadMusicFolder() {
+    const tree = await pickFolder('music');
+    if (!tree) return;
+    onMusicTreeReady(tree);
+  }
+  function onMusicTreeReady(tree) {
+    musicTree = tree;
+    const tracks = flattenAudioFiles(tree);
+    $('musicMeta').innerHTML = `<b>${escapeHtml(tree.name)}</b>`;
+    $('musicHint').textContent = HAS_FS_ACCESS ? '' : 'This browser will ask you to reselect the folder next time you open the app.';
+    playlist = tracks; currentIndex = -1; context = 'music';
+    renderTrackList(tracks, 'music');
+  }
+  $('pickMusicBtn').addEventListener('click', loadMusicFolder);
+
+  /* ================= FILES TAB ================= */
+  let filesTree = null;
+  let selectedDirPath = null;
+
+  async function loadFilesFolder() {
+    const tree = await pickFolder('files');
+    if (!tree) return;
+    onFilesTreeReady(tree);
+  }
+  function onFilesTreeReady(tree) {
+    filesTree = tree;
+    $('filesMeta').innerHTML = `<b>${escapeHtml(tree.name)}</b>`;
+    renderTree();
+    selectDirectory(tree);
+  }
+  $('pickFilesBtn').addEventListener('click', loadFilesFolder);
+
+  function renderTree() {
+    const pane = $('treePane');
+    pane.innerHTML = '';
+    if (!filesTree) { pane.innerHTML = `<div class="empty">Folder tree appears here</div>`; return; }
+    pane.appendChild(renderTreeNode(filesTree, true));
+  }
+
+  function renderTreeNode(node, isRoot) {
+    const wrap = document.createElement('div');
+    wrap.className = 'tree-node';
+    const row = document.createElement('div');
+    row.className = 'tree-row';
+    row.dataset.path = node.path;
+    const hasChildDirs = node.children && node.children.some(c => c.kind === 'directory');
+    row.innerHTML = `
+      ${node.children ? `<svg class="tree-chev" viewBox="0 0 24 24" fill="currentColor"><path d="M9 6l6 6-6 6z"/></svg>` : `<span style="width:11px;display:inline-block;"></span>`}
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(node.name)}</span>`;
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectDirectory(node);
+      if (node.children && node.children.some(c => c.kind === 'directory')) {
+        const childrenEl = wrap.querySelector('.tree-children');
+        if (childrenEl) { childrenEl.classList.toggle('open'); row.classList.toggle('expanded'); }
+      }
+      document.querySelectorAll('.tree-row').forEach(r => r.classList.toggle('active', r === row));
+    });
+    wrap.appendChild(row);
+
+    const dirChildren = (node.children || []).filter(c => c.kind === 'directory');
+    if (dirChildren.length) {
+      const childrenWrap = document.createElement('div');
+      childrenWrap.className = 'tree-children' + (isRoot ? ' open' : '');
+      if (isRoot) row.classList.add('expanded');
+      dirChildren.forEach(c => childrenWrap.appendChild(renderTreeNode(c, false)));
+      wrap.appendChild(childrenWrap);
+    }
+    return wrap;
+  }
+
+  function selectDirectory(node) {
+    selectedDirPath = node.path;
+    renderBreadcrumb(node.path);
+    renderFileList(node);
+  }
+
+  function renderBreadcrumb(path) {
+    const parts = path.split('/');
+    const el = $('breadcrumb');
+    el.innerHTML = parts.map((p, i) => `<span data-i="${i}">${escapeHtml(p)}</span>`).join('<span class="sep">/</span>');
+    el.querySelectorAll('span[data-i]').forEach(span => {
+      span.addEventListener('click', () => {
+        const i = Number(span.dataset.i);
+        const targetPath = parts.slice(0, i + 1).join('/');
+        const node = findNodeByPath(filesTree, targetPath);
+        if (node) selectDirectory(node);
+      });
+    });
+  }
+
+  function findNodeByPath(root, path) {
+    if (!root) return null;
+    if (root.path === path) return root;
+    for (const c of (root.children || [])) {
+      const found = findNodeByPath(c, path);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  async function renderFileList(node) {
+    const container = $('fileListContainer');
+    if (!node.children || !node.children.length) {
+      container.innerHTML = `<div class="empty">This folder is empty.</div>`;
+      return;
+    }
+    container.innerHTML = '';
+    for (const child of node.children) {
+      const row = document.createElement('div');
+      row.className = 'file-row' + (child.kind === 'directory' ? ' dir' : '');
+      const icon = child.kind === 'directory'
+        ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>`
+        : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>`;
+      row.innerHTML = `${icon}<span class="fname">${escapeHtml(child.name)}</span><span class="fsize" data-size></span>`;
+      if (child.kind === 'directory') {
+        row.addEventListener('click', () => selectDirectory(child));
+        row.querySelector('[data-size]').textContent = `${child.children.length} item${child.children.length === 1 ? '' : 's'}`;
+      } else {
+        if (child.file) {
+          row.querySelector('[data-size]').textContent = formatSize(child.file.size);
+        } else {
+          getFileFromNode(child).then(f => { const el = row.querySelector('[data-size]'); if (el) el.textContent = formatSize(f.size); }).catch(()=>{});
+        }
+        if (isAudioExt(child.ext)) {
+          const playBtn = document.createElement('button');
+          playBtn.className = 'play-mini'; playBtn.setAttribute('aria-label', 'Play ' + child.name);
+          playBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
+          playBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const siblingAudio = node.children.filter(c => c.kind === 'file' && isAudioExt(c.ext));
+            const idx = siblingAudio.indexOf(child);
+            playlist = siblingAudio;
+            playIndex(idx, { context: 'files', bookKey: null });
+          });
+          row.appendChild(playBtn);
+        }
+      }
+      container.appendChild(row);
+    }
+  }
+
+  /* ================= AUDIOBOOKS TAB ================= */
+  let audiobooksTree = null;
+
+  async function loadAudiobooksFolder() {
+    const tree = await pickFolder('audiobooks');
+    if (!tree) return;
+    onAudiobooksTreeReady(tree);
+  }
+  function onAudiobooksTreeReady(tree) {
+    audiobooksTree = tree;
+    $('audiobooksMeta').innerHTML = `<b>${escapeHtml(tree.name)}</b>`;
+    renderBookShelf(buildBooks(tree));
+  }
+  $('pickAudiobooksBtn').addEventListener('click', loadAudiobooksFolder);
+
+  function buildBooks(tree) {
+    const dirs = tree.children.filter(c => c.kind === 'directory');
+    const rootAudio = tree.children.filter(c => c.kind === 'file' && isAudioExt(c.ext));
+    const books = [];
+    for (const d of dirs) {
+      const chapters = flattenAudioFiles(d);
+      if (chapters.length) books.push({ title: d.name, key: d.path, chapters });
+    }
+    for (const f of rootAudio) books.push({ title: stripExt(f.name), key: f.path, chapters: [f] });
+    return books;
+  }
+
+  function renderBookShelf(books) {
+    const shelf = $('bookShelf');
+    if (!books.length) {
+      shelf.innerHTML = `<div class="empty">No audiobooks found. Put each book in its own subfolder, or add audio files directly.</div>`;
+      return;
+    }
+    shelf.innerHTML = '';
+    books.forEach(book => {
+      const saved = getBookProgress(book.key);
+      const card = document.createElement('div');
+      card.className = 'book-card';
+      card.dataset.key = book.key;
+      card.innerHTML = `
+        <div class="book-spine"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+        <div class="book-info">
+          <div class="book-title">${escapeHtml(book.title)}</div>
+          <div class="book-meta">${book.chapters.length} chapter${book.chapters.length === 1 ? '' : 's'}</div>
+        </div>
+        <div class="book-action">${saved ? 'RESUME ▸' : 'PLAY ▸'}</div>`;
+      card.addEventListener('click', () => {
+        playlist = book.chapters;
+        const startIdx = saved ? Math.min(saved.trackIndex, book.chapters.length - 1) : 0;
+        playIndex(startIdx, { context: 'audiobook', bookKey: book.key });
+      });
+      shelf.appendChild(card);
+    });
+    renderActiveHighlight();
+  }
+
+  /* ================= boot ================= */
+  window.addEventListener('DOMContentLoaded', () => {
+    restoreSlot('music', onMusicTreeReady, $('reconnectMusicBtn'));
+    restoreSlot('files', onFilesTreeReady, $('reconnectFilesBtn'));
+    restoreSlot('audiobooks', onAudiobooksTreeReady, $('reconnectAudiobooksBtn'));
+    if (!HAS_FS_ACCESS) $('musicHint').textContent = "This browser will ask you to reselect the folder each time you reopen the app.";
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+    else if (e.code === 'ArrowRight' && e.altKey) next();
+    else if (e.code === 'ArrowLeft' && e.altKey) prev();
+  });
+
+})();
+</script>
+</body>
+</html>
